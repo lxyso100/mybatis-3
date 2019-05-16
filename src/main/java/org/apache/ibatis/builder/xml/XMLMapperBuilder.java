@@ -81,6 +81,7 @@ public class XMLMapperBuilder extends BaseBuilder {
 
   private XMLMapperBuilder(XPathParser parser, Configuration configuration, String resource, Map<String, XNode> sqlFragments) {
     super(configuration);
+    // 创建 MapperBuilderAssistant 对象
     this.builderAssistant = new MapperBuilderAssistant(configuration, resource);
     this.parser = parser;
     this.sqlFragments = sqlFragments;
@@ -88,8 +89,11 @@ public class XMLMapperBuilder extends BaseBuilder {
   }
 
   public void parse() {
+    //判断当前 Mapper 是否已经加载过
     if (!configuration.isResourceLoaded(resource)) {
+      //解析mapper节点
       configurationElement(parser.evalNode("/mapper"));
+      //标记该资源已加载
       configuration.addLoadedResource(resource);
       bindMapperForNamespace();
     }
@@ -105,16 +109,25 @@ public class XMLMapperBuilder extends BaseBuilder {
 
   private void configurationElement(XNode context) {
     try {
+      //1. 获取namespace（命名空间）属性
       String namespace = context.getStringAttribute("namespace");
+      //命名空间不能为空： 命名空间（Namespaces）在之前版本的 MyBatis 中是可选的，这样容易引起混淆因此毫无益处。现在命名空间则是必须的，且意于简单地用更长的完全限定名来隔离语句。
       if (namespace == null || namespace.equals("")) {
         throw new BuilderException("Mapper's namespace cannot be empty");
       }
+      //1. 设置 namespace 属性
       builderAssistant.setCurrentNamespace(namespace);
+      //3. 解析<cache-ref />节点
       cacheRefElement(context.evalNode("cache-ref"));
+      //4. 解析<cache /> 节点
       cacheElement(context.evalNode("cache"));
+      // 已废弃！老式风格的参数映射。内联参数是首选,这个元素可能在将来被移除，这里不会记录
       parameterMapElement(context.evalNodes("/mapper/parameterMap"));
+      //5. 解析 <resultMap /> 节点
       resultMapElements(context.evalNodes("/mapper/resultMap"));
+      //6. 解析 <sql /> 节点
       sqlElement(context.evalNodes("/mapper/sql"));
+      //7.  解析 <select /> <insert /> <update /> <delete />
       buildStatementFromContext(context.evalNodes("select|insert|update|delete"));
     } catch (Exception e) {
       throw new BuilderException("Error parsing Mapper XML. The XML location is '" + resource + "'. Cause: " + e, e);
@@ -186,11 +199,14 @@ public class XMLMapperBuilder extends BaseBuilder {
 
   private void cacheRefElement(XNode context) {
     if (context != null) {
+      //1. 获得指向的 namespace 名字，并添加到 configuration 的 cacheRefMap 中
       configuration.addCacheRef(builderAssistant.getCurrentNamespace(), context.getStringAttribute("namespace"));
+      //2. 创建 CacheRefResolver 对象，并执行解析
       CacheRefResolver cacheRefResolver = new CacheRefResolver(builderAssistant, context.getStringAttribute("namespace"));
       try {
         cacheRefResolver.resolveCacheRef();
       } catch (IncompleteElementException e) {
+        //3 解析失败，添加到 configuration 的 incompleteCacheRefs 中
         configuration.addIncompleteCacheRef(cacheRefResolver);
       }
     }
@@ -200,13 +216,17 @@ public class XMLMapperBuilder extends BaseBuilder {
     if (context != null) {
       String type = context.getStringAttribute("type", "PERPETUAL");
       Class<? extends Cache> typeClass = typeAliasRegistry.resolveAlias(type);
+      //1. 缓存过期策略： FIFO先进先出, LRU最近最少使用算法
       String eviction = context.getStringAttribute("eviction", "LRU");
       Class<? extends Cache> evictionClass = typeAliasRegistry.resolveAlias(eviction);
+      //2. 刷新时间
       Long flushInterval = context.getLongAttribute("flushInterval");
+      //3. 缓存大小
       Integer size = context.getIntAttribute("size");
       boolean readWrite = !context.getBooleanAttribute("readOnly", false);
       boolean blocking = context.getBooleanAttribute("blocking", false);
       Properties props = context.getChildrenAsProperties();
+      //4. 构建新缓存策略
       builderAssistant.useNewCache(typeClass, evictionClass, flushInterval, size, readWrite, blocking, props);
     }
   }
@@ -254,32 +274,44 @@ public class XMLMapperBuilder extends BaseBuilder {
 
   private ResultMap resultMapElement(XNode resultMapNode, List<ResultMapping> additionalResultMappings) throws Exception {
     ErrorContext.instance().activity("processing " + resultMapNode.getValueBasedIdentifier());
+    //1. 获取id
     String id = resultMapNode.getStringAttribute("id",
         resultMapNode.getValueBasedIdentifier());
+    //2. 获取type
     String type = resultMapNode.getStringAttribute("type",
         resultMapNode.getStringAttribute("ofType",
             resultMapNode.getStringAttribute("resultType",
                 resultMapNode.getStringAttribute("javaType"))));
+    //3. 获取extend
     String extend = resultMapNode.getStringAttribute("extends");
+    //4. 获取autoMapping
     Boolean autoMapping = resultMapNode.getBooleanAttribute("autoMapping");
+
+    //5. 加载type对应的类（映射对象）
     Class<?> typeClass = resolveClass(type);
     Discriminator discriminator = null;
-    List<ResultMapping> resultMappings = new ArrayList<ResultMapping>();
+    //6.  创建 ResultMapping 集合
+    List<ResultMapping> resultMappings = new ArrayList<>();
     resultMappings.addAll(additionalResultMappings);
+    //7. 遍历resultMap节点
     List<XNode> resultChildren = resultMapNode.getChildren();
     for (XNode resultChild : resultChildren) {
       if ("constructor".equals(resultChild.getName())) {
+        //8. 处理constructor节点
         processConstructorElement(resultChild, typeClass, resultMappings);
       } else if ("discriminator".equals(resultChild.getName())) {
+        //9. 处理鉴别器
         discriminator = processDiscriminatorElement(resultChild, typeClass, resultMappings);
       } else {
-        List<ResultFlag> flags = new ArrayList<ResultFlag>();
+        //10. 处理其他节点
+        List<ResultFlag> flags = new ArrayList<>();
         if ("id".equals(resultChild.getName())) {
           flags.add(ResultFlag.ID);
         }
         resultMappings.add(buildResultMappingFromContext(resultChild, typeClass, flags));
       }
     }
+    //11. 创建 ResultMapResolver 对象，执行解析
     ResultMapResolver resultMapResolver = new ResultMapResolver(builderAssistant, id, typeClass, extend, discriminator, resultMappings, autoMapping);
     try {
       return resultMapResolver.resolve();

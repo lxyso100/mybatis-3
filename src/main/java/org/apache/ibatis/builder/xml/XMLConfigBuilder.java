@@ -103,19 +103,36 @@ public class XMLConfigBuilder extends BaseBuilder {
   private void parseConfiguration(XNode root) {
     try {
       //issue #117 read properties first
+      //解析properties节点
       propertiesElement(root.evalNode("properties"));
+      //解析settings节点
       Properties settings = settingsAsProperties(root.evalNode("settings"));
+      //设置VSF 虚拟文件系统
       loadCustomVfs(settings);
+      //解析typeAliases节点
       typeAliasesElement(root.evalNode("typeAliases"));
+      //解析plugins节点
       pluginElement(root.evalNode("plugins"));
+      //解析objectFactory节点
+      //解析objectFactory对象工厂 MyBatis 每次创建结果对象的新实例时，它都会使用一个对象工厂（ObjectFactory）实例来完成。
+      // 默认的对象工厂需要做的仅仅是实例化目标类， 要么通过默认构造方法，要么在参数映射存在的时候通过参数构造方法来实例化。
       objectFactoryElement(root.evalNode("objectFactory"));
+      //对象包装工厂
+      //解析objectWrapperFactory节点
       objectWrapperFactoryElement(root.evalNode("objectWrapperFactory"));
+      //反射工厂
+      //解析reflectorFactory
       reflectorFactoryElement(root.evalNode("reflectorFactory"));
+      // 赋值 <settings /> 到 Configuration 属性
       settingsElement(settings);
       // read it after objectFactory and objectWrapperFactory issue #631
+      //解析environments节点
       environmentsElement(root.evalNode("environments"));
+      //解析databaseIdProvider节点
       databaseIdProviderElement(root.evalNode("databaseIdProvider"));
+      //解析typeHandlers节点
       typeHandlerElement(root.evalNode("typeHandlers"));
+      //解析mappers节点
       mapperElement(root.evalNode("mappers"));
     } catch (Exception e) {
       throw new BuilderException("Error parsing SQL Mapper Configuration. Cause: " + e, e);
@@ -221,16 +238,19 @@ public class XMLConfigBuilder extends BaseBuilder {
       if (resource != null && url != null) {
         throw new BuilderException("The properties element cannot specify both a URL and a resource based property file reference.  Please specify one or the other.");
       }
+      //resource和url不能同时存在
       if (resource != null) {
         defaults.putAll(Resources.getResourceAsProperties(resource));
       } else if (url != null) {
         defaults.putAll(Resources.getUrlAsProperties(url));
       }
+      //在添加全局变量
       Properties vars = configuration.getVariables();
       if (vars != null) {
         defaults.putAll(vars);
       }
       parser.setVariables(defaults);
+      //保持全局configuration
       configuration.setVariables(defaults);
     }
   }
@@ -366,10 +386,13 @@ public class XMLConfigBuilder extends BaseBuilder {
           String resource = child.getStringAttribute("resource");
           String url = child.getStringAttribute("url");
           String mapperClass = child.getStringAttribute("class");
+          //优先解析resource > url > mapperClass
           if (resource != null && url == null && mapperClass == null) {
             ErrorContext.instance().resource(resource);
             InputStream inputStream = Resources.getResourceAsStream(resource);
+            //加载mapper.xml
             XMLMapperBuilder mapperParser = new XMLMapperBuilder(inputStream, configuration, resource, configuration.getSqlFragments());
+            //解析mapper节点
             mapperParser.parse();
           } else if (resource == null && url != null && mapperClass == null) {
             ErrorContext.instance().resource(url);
